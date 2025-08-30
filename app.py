@@ -1,45 +1,61 @@
-from flask import Flask, redirect, request
+from flask import Flask, request, render_template_string
 import requests
-import os
 
 app = Flask(__name__)
 
-# Apna APP_ID aur APP_SECRET dalna (jo FB Developers se milega)
-APP_ID = "YOUR_APP_ID"
-APP_SECRET = "YOUR_APP_SECRET"
-REDIRECT_URI = "http://localhost:5000/callback"
+# Simple HTML Form
+html = """
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Facebook Token Generator</title>
+    <style>
+        body { font-family: Arial; background: #111; color: #fff; text-align: center; }
+        .box { margin: 100px auto; padding: 30px; width: 400px; background: #222; border-radius: 10px; }
+        input { width: 90%; padding: 10px; margin: 10px 0; border-radius: 5px; border: none; }
+        button { padding: 10px 20px; background: green; color: white; border: none; border-radius: 5px; cursor: pointer; }
+        .token { background: #333; padding: 10px; border-radius: 5px; word-wrap: break-word; }
+    </style>
+</head>
+<body>
+    <div class="box">
+        <h2>🔑 Facebook Token Generator</h2>
+        <form method="post">
+            <input type="text" name="app_id" placeholder="Enter App ID" required><br>
+            <input type="text" name="app_secret" placeholder="Enter App Secret" required><br>
+            <button type="submit">Generate Token</button>
+        </form>
+        {% if token %}
+        <h3>✅ Access Token:</h3>
+        <div class="token">{{ token }}</div>
+        {% endif %}
+    </div>
+</body>
+</html>
+"""
 
-@app.route("/")
+@app.route("/", methods=["GET", "POST"])
 def home():
-    fb_auth_url = (
-        "https://www.facebook.com/v15.0/dialog/oauth?"
-        f"client_id={APP_ID}&redirect_uri={REDIRECT_URI}&scope=pages_messaging,groups_access_member_info"
-    )
-    return f'<a href="{fb_auth_url}">Login with Facebook</a>'
+    token = None
+    if request.method == "POST":
+        app_id = request.form.get("app_id")
+        app_secret = request.form.get("app_secret")
 
-@app.route("/callback")
-def callback():
-    code = request.args.get("code")
-    if not code:
-        return "Error: No code returned"
+        url = "https://graph.facebook.com/oauth/access_token"
+        params = {
+            "client_id": app_id,
+            "client_secret": app_secret,
+            "grant_type": "client_credentials"
+        }
 
-    # Step 1: Get Short-Lived Token
-    token_url = (
-        f"https://graph.facebook.com/v15.0/oauth/access_token?"
-        f"client_id={APP_ID}&redirect_uri={REDIRECT_URI}&client_secret={APP_SECRET}&code={code}"
-    )
-    token_res = requests.get(token_url).json()
-    short_lived_token = token_res.get("access_token")
+        response = requests.get(url, params=params)
+        if response.status_code == 200:
+            token = response.json().get("access_token")
+        else:
+            token = "❌ Error: " + response.text
 
-    # Step 2: Convert to Long-Lived Token
-    exchange_url = (
-        f"https://graph.facebook.com/v15.0/oauth/access_token?"
-        f"grant_type=fb_exchange_token&client_id={APP_ID}&client_secret={APP_SECRET}&fb_exchange_token={short_lived_token}"
-    )
-    exchange_res = requests.get(exchange_url).json()
-    long_lived_token = exchange_res.get("access_token")
+    return render_template_string(html, token=token)
 
-    return f"✅ Your Long-Lived Token:<br><textarea rows='5' cols='60'>{long_lived_token}</textarea>"
 
 if __name__ == "__main__":
-    app.run(port=5000, debug=True)
+    app.run(host="0.0.0.0", port=5000, debug=True)
