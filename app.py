@@ -1,61 +1,43 @@
-from flask import Flask, request, render_template_string
+from flask import Flask, redirect, request, session, url_for
 import requests
+import os
 
 app = Flask(__name__)
+app.secret_key = "your_secret_key"
 
-# Simple HTML Form
-html = """
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Facebook Token Generator</title>
-    <style>
-        body { font-family: Arial; background: #111; color: #fff; text-align: center; }
-        .box { margin: 100px auto; padding: 30px; width: 400px; background: #222; border-radius: 10px; }
-        input { width: 90%; padding: 10px; margin: 10px 0; border-radius: 5px; border: none; }
-        button { padding: 10px 20px; background: green; color: white; border: none; border-radius: 5px; cursor: pointer; }
-        .token { background: #333; padding: 10px; border-radius: 5px; word-wrap: break-word; }
-    </style>
-</head>
-<body>
-    <div class="box">
-        <h2>🔑 Facebook Token Generator</h2>
-        <form method="post">
-            <input type="text" name="app_id" placeholder="Enter App ID" required><br>
-            <input type="text" name="app_secret" placeholder="Enter App Secret" required><br>
-            <button type="submit">Generate Token</button>
-        </form>
-        {% if token %}
-        <h3>✅ Access Token:</h3>
-        <div class="token">{{ token }}</div>
-        {% endif %}
-    </div>
-</body>
-</html>
-"""
+GOOGLE_CLIENT_ID = "YOUR_CLIENT_ID"
+GOOGLE_CLIENT_SECRET = "YOUR_CLIENT_SECRET"
+REDIRECT_URI = "http://localhost:5000/callback"
 
-@app.route("/", methods=["GET", "POST"])
+@app.route("/")
 def home():
-    token = None
-    if request.method == "POST":
-        app_id = request.form.get("app_id")
-        app_secret = request.form.get("app_secret")
+    return '<a href="/login">Login with Google</a>'
 
-        url = "https://graph.facebook.com/oauth/access_token"
-        params = {
-            "client_id": app_id,
-            "client_secret": app_secret,
-            "grant_type": "client_credentials"
-        }
+@app.route("/login")
+def login():
+    google_auth_url = (
+        "https://accounts.google.com/o/oauth2/v2/auth"
+        "?response_type=code"
+        f"&client_id={GOOGLE_CLIENT_ID}"
+        f"&redirect_uri={REDIRECT_URI}"
+        "&scope=openid%20email%20profile"
+    )
+    return redirect(google_auth_url)
 
-        response = requests.get(url, params=params)
-        if response.status_code == 200:
-            token = response.json().get("access_token")
-        else:
-            token = "❌ Error: " + response.text
-
-    return render_template_string(html, token=token)
-
+@app.route("/callback")
+def callback():
+    code = request.args.get("code")
+    token_url = "https://oauth2.googleapis.com/token"
+    data = {
+        "code": code,
+        "client_id": GOOGLE_CLIENT_ID,
+        "client_secret": GOOGLE_CLIENT_SECRET,
+        "redirect_uri": REDIRECT_URI,
+        "grant_type": "authorization_code"
+    }
+    r = requests.post(token_url, data=data)
+    token_info = r.json()
+    return f"Your Access Token: {token_info.get('access_token')}"
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    app.run(debug=True, port=5000)
